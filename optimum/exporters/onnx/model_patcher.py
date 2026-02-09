@@ -26,6 +26,7 @@ from torch.onnx import symbolic_helper
 from transformers.modeling_outputs import BaseModelOutput
 from transformers.models.speecht5.modeling_speecht5 import SpeechT5EncoderWithSpeechPrenet
 
+from optimum.exporters.onnx.utils import ONNXDynamicCache, ONNXEncoderDecoderCache
 from optimum.utils import is_diffusers_version, is_torch_version, is_transformers_version, logging
 
 
@@ -205,18 +206,9 @@ def preprocess_past_key_values(past_key_values):
         and isinstance(past_key_values[0], (list, tuple))
     ):
         if len(past_key_values[0]) == 2:
-            if hasattr(DynamicCache, "from_legacy_cache"):
-                past_key_values = DynamicCache.from_legacy_cache(past_key_values)
-            else:
-                past_key_values = DynamicCache(past_key_values)
+            past_key_values = ONNXDynamicCache.from_legacy_cache(past_key_values)
         elif len(past_key_values[0]) == 4:
-            if hasattr(EncoderDecoderCache, "from_legacy_cache"):
-                past_key_values = EncoderDecoderCache.from_legacy_cache(past_key_values)
-            else:
-                past_key_values = EncoderDecoderCache(
-                    DynamicCache([layer[:2] for layer in past_key_values]),
-                    DynamicCache([layer[2:] for layer in past_key_values]),
-                )
+            past_key_values = ONNXEncoderDecoderCache.from_legacy_cache(past_key_values)
         else:
             raise ValueError(
                 f"past_key_values should have either 2 or 4 elements, but it has {len(past_key_values[0])} elements."
