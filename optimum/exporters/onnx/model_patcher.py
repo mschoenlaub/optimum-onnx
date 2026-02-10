@@ -37,7 +37,6 @@ if is_transformers_version(">=", "4.54"):
 if is_transformers_version(">=", "4.43") and is_transformers_version("<", "4.48"):
     from transformers.models.clip.modeling_clip import CLIPAttention, CLIPSdpaAttention
 if is_transformers_version(">=", "4.48"):
-    from transformers.cache_utils import DynamicCache, EncoderDecoderCache
     from transformers.models.moonshine.modeling_moonshine import MoonshinePreTrainedModel
 if is_transformers_version(">=", "4.53"):
     from transformers.masking_utils import (
@@ -218,21 +217,10 @@ def preprocess_past_key_values(past_key_values):
 
 
 def postprocess_past_key_values(past_key_values, output_names: list[str]):
-    if is_transformers_version(">=", "4.48") and isinstance(past_key_values, (EncoderDecoderCache, DynamicCache)):
-        if hasattr(past_key_values, "to_legacy_cache"):
-            past_key_values = past_key_values.to_legacy_cache()
-        elif isinstance(past_key_values, DynamicCache):
-            past_key_values = [(lay.keys, lay.values) for lay in past_key_values.layers]
-        elif isinstance(past_key_values, EncoderDecoderCache):
-            past_key_values = [
-                (self_lay.keys, self_lay.values, cross_lay.keys, cross_lay.values)
-                for self_lay, cross_lay in zip(
-                    past_key_values.self_attention_cache.layers,
-                    past_key_values.cross_attention_cache.layers,
-                )
-            ]
-        else:
-            raise NotImplementedError(f"Unable to serialize class {type(past_key_values)}.")
+    if is_transformers_version(">=", "4.48") and isinstance(
+        past_key_values, (ONNXEncoderDecoderCache, ONNXDynamicCache)
+    ):
+        past_key_values = past_key_values.to_legacy_cache()
 
     if (
         isinstance(past_key_values, (list, tuple))
