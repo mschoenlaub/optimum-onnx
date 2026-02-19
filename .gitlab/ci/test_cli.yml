@@ -1,0 +1,12 @@
+.test_template:
+  before_script:
+    - pip install --upgrade pip uv
+    - uv pip install .[tests,onnxruntime]
+
+test_cli:
+  extends: .test_template
+  stage: test
+  script:
+    - pytest tests/cli -vvvv --durations=0
+  rules:
+    - !reference [.default_rules, rules]

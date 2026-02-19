@@ -1,0 +1,64 @@
+.onnxruntime_matrix:
+  stage: test
+  parallel:
+    matrix:
+      - TRANSFORMERS_VERSION: ["latest", "4.36.*", "4.45.*", "4.56.*"]
+        TEST_FILE:
+          - test_decoder.py
+          - test_diffusion.py
+          - test_modeling.py
+          - test_optimization.py
+          - test_quantization.py
+          - test_seq2seq.py
+          - test_timm.py
+          - test_utils.py
+  before_script:
+    - pip install --upgrade pip uv
+    - uv pip install .[tests,onnxruntime]
+    - |
+      if [ "$TRANSFORMERS_VERSION" == "4.36.*" ]; then
+        uv pip install "diffusers<0.32.0"
+        uv pip install "transformers==4.36.*" "pytest<8.0.0"
+      elif [ "$TRANSFORMERS_VERSION" == "4.45.*" ]; then
+        uv pip install "diffusers<0.33.0"
+        uv pip install "transformers==4.45.*"
+      elif [ "$TRANSFORMERS_VERSION" == "4.56.*" ]; then
+        uv pip install diffusers
+        uv pip install "transformers==4.56.*"
+      else
+        uv pip install diffusers
+      fi
+  script:
+    - pytest tests/onnxruntime/$TEST_FILE -vvvv -n auto
+  rules:
+    - !reference [.default_rules, rules]
+
+test_onnxruntime:
+  extends: .onnxruntime_matrix
+
+test_onnxruntime_slow:
+  stage: test-slow
+  before_script:
+    - pip install --upgrade pip
+    - pip install --no-cache-dir torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
+    - pip install .[tests,onnxruntime] diffusers
+  variables:
+    RUN_SLOW: "true"
+  script:
+    - pytest tests/onnxruntime --durations=0 -vvvv
+  rules:
+    - !reference [.manual_rules, rules]
+
+test_onnxruntime_gpu:
+  stage: test-slow
+  image: nvcr.io/nvidia/tensorrt:24.12-py3
+  tags:
+    - gpu
+  before_script:
+    - pip install --upgrade pip
+    - pip install --no-cache-dir torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu124
+    - pip install .[tests,onnxruntime-gpu] diffusers
+  script:
+    - pytest tests/onnxruntime -m "cuda_ep_test or trt_ep_test" --durations=0 -vvvv -n auto
+  rules:
+    - !reference [.manual_rules, rules]

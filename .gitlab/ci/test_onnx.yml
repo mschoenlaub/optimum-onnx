@@ -1,0 +1,10 @@
+test_onnx:
+  stage: test
+  before_script:
+    - pip install --upgrade pip
+    - pip install --no-cache-dir torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
+    - pip install .[tests,onnxruntime] diffusers
+  script:
+    - pytest tests/onnx -n auto -vvvv --durations=0
+  rules:
+    - !reference [.default_rules, rules]

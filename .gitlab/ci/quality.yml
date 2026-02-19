@@ -1,0 +1,9 @@
+quality:
+  stage: quality
+  script:
+    - pip install --upgrade pip
+    - pip install .[quality]
+    - ruff format --check .
+    - ruff check .
+  rules:
+    - !reference [.default_rules, rules]
