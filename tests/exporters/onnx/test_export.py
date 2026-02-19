@@ -56,6 +56,7 @@ from optimum.exporters.utils import (
 )
 from optimum.utils import DummyPastKeyValuesGenerator, DummyTextInputGenerator, NormalizedTextConfig
 from optimum.utils.testing_utils import grid_parameters, require_diffusers
+from optimum.utils import is_transformers_version
 
 
 SEED = 42
@@ -354,6 +355,8 @@ class OnnxExportTestCase(TestCase):
     @require_vision
     @require_diffusers
     def test_pytorch_export_for_diffusion_models(self, model_type, model_name):
+        if model_type == "stable-diffusion-3" and is_transformers_version(">=", "5"):
+            self.skipTest("SD3 export has mixed dtype issues with transformers 5.0")
         self._onnx_export_diffusion_models(model_type, model_name)
 
     @parameterized.expand(PYTORCH_DIFFUSION_MODEL.items())
@@ -498,6 +501,10 @@ class OnnxCustomExport(TestCase):
             assert "logits" in output_names
             assert "present.0.key" in output_names
 
+    @pytest.mark.skipif(
+        is_transformers_version(">=", "5"),
+        reason="MPT remote code not compatible with transformers 5.0",
+    )
     @parameterized.expand([(None,), (fn_get_submodels_custom,)])
     @mock.patch.dict("sys.modules", triton_pre_mlir=mock.Mock())
     def test_custom_export_trust_remote(self, fn_get_submodels):
@@ -518,6 +525,10 @@ class OnnxCustomExport(TestCase):
                 opset=14,
             )
 
+    @pytest.mark.skipif(
+        is_transformers_version(">=", "5"),
+        reason="Arctic remote code not compatible with transformers 5.0",
+    )
     def test_custom_export_trust_remote_error(self):
         model_id = "optimum-internal-testing/tiny-random-arctic"
 
