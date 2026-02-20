@@ -1,9 +1,7 @@
 quality:
   stage: quality
+  image: registry.gitlab.com/pipeline-components/ruff:latest
   script:
-    - pip install --upgrade pip
-    - pip install .[quality]
-    - ruff format --check .
-    - ruff check .
+    - ruff check --output-format=gitlab .
   rules:
     - !reference [.default_rules, rules]
