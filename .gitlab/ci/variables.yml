@@ -1,0 +1,31 @@
+variables:
+  UV_SYSTEM_PYTHON: "true"
+  UV_TORCH_BACKEND: auto
+  TRANSFORMERS_IS_CI: "true"
+  PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
+  HF_HUB_CACHE: "$CI_PROJECT_DIR/.cache/huggingface"
+  PYTHON_VERSION: "3.11"
+
+default:
+  image: python:${PYTHON_VERSION}
+  cache:
+    - key: pip-${CI_JOB_NAME}
+      paths:
+        - .cache/pip/
+    - key: hf-cache-${CI_JOB_NAME}
+      paths:
+        - .cache/huggingface/
+
+.default_rules:
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == "main"
+    - if: $CI_COMMIT_BRANCH =~ /^v.*-release$/
+
+.manual_rules:
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+    - if: $CI_PIPELINE_SOURCE == "web"
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      when: manual
+      allow_failure: true

@@ -1,0 +1,12 @@
+include:
+  - local: .gitlab/ci/variables.yml
+  - local: .gitlab/ci/quality.yml
+  - local: .gitlab/ci/test_cli.yml
+  - local: .gitlab/ci/test_exporters.yml
+  - local: .gitlab/ci/test_onnx.yml
+  - local: .gitlab/ci/test_onnxruntime.yml
+
+stages:
+  - quality
+  - test
+  - test-slow

@@ -239,8 +239,6 @@ def postprocess_past_key_values(past_key_values, output_names: list[str]):
                     past_key_values.cross_attention_cache.layers,
                 )
             ]
-        else:
-            raise NotImplementedError(f"Unable to serialize class {type(past_key_values)}.")
 
     if (
         isinstance(past_key_values, (list, tuple))

@@ -1,0 +1,40 @@
+test_exporters_common:
+  extends: .test_template
+  stage: test
+  script:
+    - pytest tests/exporters/common -vvvv -n auto
+  rules:
+    - !reference [.default_rules, rules]
+
+test_exporters_onnx:
+  stage: test
+  before_script:
+    - pip install --upgrade pip uv
+    - uv pip install .[tests,onnxruntime] diffusers
+  script:
+    - pytest tests/exporters/onnx/test_export.py -vvvv -n auto
+  rules:
+    - !reference [.default_rules, rules]
+
+test_exporters_onnx_cli:
+  stage: test
+  before_script:
+    - pip install --upgrade pip uv
+    - uv pip install .[tests,onnxruntime] diffusers
+  script:
+    - pytest tests/exporters/onnx/test_export_cli.py -vvvv -n auto
+  rules:
+    - !reference [.default_rules, rules]
+
+test_offline:
+  extends: .test_template
+  stage: test
+  script:
+    - HF_HOME=/tmp/ hf download hf-internal-testing/tiny-random-gpt2
+    - HF_HOME=/tmp/ HF_HUB_OFFLINE=1 optimum-cli export onnx --model hf-internal-testing/tiny-random-gpt2 gpt2_onnx --task text-generation
+    - hf download hf-internal-testing/tiny-random-gpt2
+    - HF_HUB_OFFLINE=1 optimum-cli export onnx --model hf-internal-testing/tiny-random-gpt2 gpt2_onnx --task text-generation
+    - pytest tests/onnxruntime/test_modeling.py -k "test_load_model_from_hub and not from_hub_onnx" -s -vvvvv
+    - HF_HUB_OFFLINE=1 pytest tests/onnxruntime/test_modeling.py -k "test_load_model_from_hub and not from_hub_onnx" -s -vvvvv
+  rules:
+    - !reference [.default_rules, rules]
