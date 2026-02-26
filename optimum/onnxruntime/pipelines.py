@@ -26,6 +26,7 @@ from transformers import pipeline as transformers_pipeline
 from optimum.utils import is_onnxruntime_available, is_transformers_version
 from optimum.utils.logging import get_logger
 
+from optimum.onnxruntime.modeling_decoder import ORTModelForImageTextToText
 
 if TYPE_CHECKING:
     from transformers import (
@@ -74,6 +75,7 @@ if is_onnxruntime_available():
         "text2text-generation": (ORTModelForSeq2SeqLM,),
         "text-classification": (ORTModelForSequenceClassification,),
         "text-generation": (ORTModelForCausalLM,),
+        "image-text-to-text": (ORTModelForImageTextToText,),
         "token-classification": (ORTModelForTokenClassification,),
         "translation": (ORTModelForSeq2SeqLM,),
         "zero-shot-classification": (ORTModelForSequenceClassification,),

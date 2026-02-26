@@ -119,6 +119,22 @@ if TYPE_CHECKING:
 logger = logging.get_logger(__name__)
 
 
+class Gemma3NormalizedConfig(NormalizedConfig):
+    """
+    Normalized config for Gemma3 multimodal models.
+    Routes text attributes to text_config and vision attributes to vision_config.
+    """
+    VOCAB_SIZE = "text_config.vocab_size"
+    HIDDEN_SIZE = "text_config.hidden_size"
+    NUM_LAYERS = "text_config.num_hidden_layers"
+    NUM_ATTENTION_HEADS = "text_config.num_attention_heads"
+    NUM_KEY_VALUE_HEADS = "text_config.num_key_value_heads"
+    HEAD_DIM = "text_config.head_dim"
+    EOS_TOKEN_ID = "text_config.eos_token_id"
+    IMAGE_SIZE = "vision_config.image_size"
+    NUM_CHANNELS = "vision_config.num_channels"
+
+
 COMMON_TEXT_TASKS = [
     "feature-extraction",
     "fill-mask",
@@ -140,6 +156,12 @@ COMMON_TEXT2TEXT_GENERATION_TASKS = [
     *COMMON_TEXT_GENERATION_TASKS,
     "text2text-generation",
     "text2text-generation-with-past",
+]
+
+COMMON_VL_TEXT_GENERATION_TASKS = [
+    *COMMON_TEXT_GENERATION_TASKS,
+    "image-text-to-text",
+    "image-text-to-text-with-past",
 ]
 
 
@@ -527,16 +549,44 @@ class Gemma3TextOnnxConfig(GemmaOnnxConfig):
     MIN_TRANSFORMERS_VERSION = version.parse("4.53.0")
 
 
-# we still don't support gemma3 for multimodal feature-extraction(-with-past) and image-text-to-text(-with-past) tasks
-@register_tasks_manager_onnx("gemma3", *COMMON_TEXT_GENERATION_TASKS, "text-classification")
+@register_tasks_manager_onnx("gemma3", *COMMON_VL_TEXT_GENERATION_TASKS, "text-classification")
 class Gemma3OnnxConfig(GemmaOnnxConfig):
     # Gemma 3 was added in transformers v4.50 using HybridCache
     # DynamicCache support was added since v4.53
     MIN_TRANSFORMERS_VERSION = version.parse("4.53.0")
+    NORMALIZED_CONFIG_CLASS = Gemma3NormalizedConfig
+    DUMMY_INPUT_GENERATOR_CLASSES = (DummyTextInputGenerator, GemmaDummyPastKeyValuesGenerator, DummyVisionInputGenerator)
 
-    def __init__(self, config: PretrainedConfig, **kwargs):
-        super().__init__(config.text_config, **kwargs)
+    @property
+    def inputs(self) -> dict[str, dict[int, str]]:
+        common_inputs = super().inputs
+        if self.task == "image-text-to-text" and not self.use_past_in_inputs:
+            common_inputs["pixel_values"] = {0: "batch_size", 1: "num_channels", 2: "height", 3: "width"}
+        return common_inputs
 
+    @property
+    def values_override(self) -> dict[str, Any] | None:
+        text_config = getattr(self._config, "text_config", self._config)
+        if hasattr(text_config, "use_cache"):
+            return {"use_cache": self.use_past}
+        return None
+
+    def generate_dummy_inputs(self, framework: str = "pt", **kwargs):
+        if self.task == "image-text-to-text" and not self.use_past_in_inputs:
+            mm_tokens = getattr(self._config, "mm_tokens_per_image", 256)
+            if "sequence_length" in kwargs:
+                kwargs["sequence_length"] += mm_tokens
+            else:
+                kwargs["sequence_length"] = DEFAULT_DUMMY_SHAPES["sequence_length"] + mm_tokens
+
+        dummy_inputs = super().generate_dummy_inputs(framework=framework, **kwargs)
+
+        if self.task == "image-text-to-text" and "pixel_values" in dummy_inputs and "input_ids" in dummy_inputs:
+            mm_tokens = getattr(self._config, "mm_tokens_per_image", 256)
+            image_token_index = getattr(self._config, "image_token_index", 262144)
+            dummy_inputs["input_ids"][:, :mm_tokens] = image_token_index
+
+        return dummy_inputs
 
 @register_tasks_manager_onnx("gpt_oss", *COMMON_TEXT_GENERATION_TASKS)
 class GPTOssOnnxConfig(GemmaOnnxConfig):
@@ -579,6 +629,12 @@ class MistralOnnxConfig(TextDecoderWithPositionIdsOnnxConfig):
     NORMALIZED_CONFIG_CLASS = NormalizedTextConfig.with_args(num_key_value_heads="num_key_value_heads", allow_new=True)
     DUMMY_INPUT_GENERATOR_CLASSES = (DummyTextInputGenerator, MistralDummyPastKeyValuesGenerator)
     DUMMY_PKV_GENERATOR_CLASS = MistralDummyPastKeyValuesGenerator
+
+@register_tasks_manager_onnx("mistral3", *COMMON_TEXT_GENERATION_TASKS)
+class Gemma3TextOnnxConfig(GemmaOnnxConfig):
+    # Gemma 3 was added in transformers v4.50 using HybridCache
+    # DynamicCache support was added since v4.53
+    MIN_TRANSFORMERS_VERSION = version.parse("4.53.0")
 
 
 @register_tasks_manager_onnx("mpt", *[*COMMON_TEXT_GENERATION_TASKS, "text-classification", "token-classification"])

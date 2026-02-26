@@ -53,6 +53,7 @@ _import_structure = {
         "ORTModelForCTC",
         "ORTModelForFeatureExtraction",
         "ORTModelForImageClassification",
+        "ORTModelForImageTextToText",
         "ORTModelForZeroShotImageClassification",
         "ORTModelForMaskedLM",
         "ORTModelForMultipleChoice",

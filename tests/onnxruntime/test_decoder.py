@@ -206,11 +206,6 @@ class ORTModelForCausalLMIntegrationTest(ORTModelTestMixin):
         if trust_remote_code:
             model_kwargs["trust_remote_code"] = True
 
-        if model_arch != "gemma3":
-            # When loading a gemma3 model with AutoModelForCausalLM, a Gemma3ForConditionalGeneration is inferred
-            # which doesn't take a use_cache argument at instantiation (yep, that is weird)
-            model_kwargs["use_cache"] = use_cache
-
         if "mxfp4" in model_arch:
             # The mxfp4 model needs to be dequantized by the Mxfp4HfQuantizer
             model_kwargs["quantization_config"] = Mxfp4Config(dequantize=True)

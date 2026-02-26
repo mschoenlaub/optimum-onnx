@@ -28,6 +28,8 @@ from transformers.file_utils import add_end_docstrings, add_start_docstrings_to_
 from transformers.modeling_outputs import CausalLMOutputWithPast
 
 from onnxruntime import InferenceSession, SessionOptions
+from transformers.utils import ModelOutput
+
 from optimum.exporters.onnx import MODEL_TYPES_REQUIRING_POSITION_IDS, main_export
 from optimum.exporters.tasks import TasksManager
 from optimum.onnxruntime.constants import (
@@ -120,10 +122,10 @@ TEXT_GENERATION_EXAMPLE = r"""
 
 
 @add_end_docstrings(ONNX_MODEL_END_DOCSTRING)
-class ORTModelForCausalLM(ORTModel, GenerationMixin):
+class ORTModelForImageTextToText(ORTModel, GenerationMixin):
     """ONNX model with a causal language modeling head for ONNX Runtime inference. This class officially supports bloom, codegen, falcon, gpt2, gpt-bigcode, gpt_neo, gpt_neox, gptj, llama."""
 
-    auto_model_class = AutoModelForCausalLM
+    auto_model_class = AutoModelForImageTextToText
     main_input_name = "input_ids"
     _supports_cache_class = False
     _is_stateful = False
@@ -148,7 +150,7 @@ class ORTModelForCausalLM(ORTModel, GenerationMixin):
         # Reference: https://github.com/huggingface/optimum/pull/1381
         if self.config.model_type in MODEL_TYPES_REQUIRING_POSITION_IDS and "position_ids" not in self.input_names:
             logger.warning(
-                f"ORTModelForCausalLM loaded a legacy ONNX model with no `position_ids` input, although the model type `{self.config.model_type}` requires it. "
+                f"ORTModelForImageTextToText loaded a legacy ONNX model with no `position_ids` input, although the model type `{self.config.model_type}` requires it. "
                 "We strongly encourage to re-export the model with Optimum-ONNX for better performance and more reliable text generation. "
                 "To re-export your model, simply set `export=True` as in `from_pretrained(..., export=True, use_cache=True)`. "
                 "Please note that support for legacy models will be removed in a future version of Optimum-ONNX."
@@ -161,95 +163,9 @@ class ORTModelForCausalLM(ORTModel, GenerationMixin):
                 "To re-export your model, simply set `export=True` in `from_pretrained(... , export=True, use_cache=True)`."
             )
 
-        self.old_bloom_modeling = self.config.model_type == "bloom" and (
-            len(self.input_shapes.get("past_key_values.0.key", ())) == 3
-            or len(self.output_shapes.get("past_key_values.0.key", ())) == 3
-            or is_transformers_version("<", "4.44.0")
-        )  # Old Bloom style
-        if self.can_use_cache and self.old_bloom_modeling:
-            logger.warning(
-                "The loaded Bloom ONNX model uses an old cache format that squeezes the batch_size and num_key_value_heads dimensions into one. "
-                "We strongly encourage to re-export the model with a newer version of Optimum and Transformers for better performance and more reliable generation. "
-                "To re-export your model, simply set `export=True` as in `from_pretrained(..., export=True, use_cache=True)`."
-            )
-
-        self.old_gpt_bigcode_modeling = self.config.model_type == "gpt_bigcode" and (
-            self.input_shapes.get("past_key_values.0.key_value", None) is not None
-            or self.output_shapes.get("past_key_values.0.key_value", None) is not None
-            or is_transformers_version("<", "4.54.0")
-        )  # Old GPT BigCode style
-        if self.can_use_cache and self.old_gpt_bigcode_modeling:
-            logger.warning(
-                "The loaded GPT BigCode ONNX model uses an old cache format that fuses keys and values in one tensor. "
-                "We strongly encourage to re-export the model with a newer version of Optimum and Transformers for better performance and more reliable generation. "
-                "To re-export your model, simply set `export=True` as in `from_pretrained(..., export=True, use_cache=True)`."
-            )
-
-        if self.config.model_type in {"gemma", "gemma3_text", "gpt_oss", "nemotron"}:
-            self.embed_size_per_head = self.config.head_dim
-        elif self.config.model_type == "gemma3":
-            self.embed_size_per_head = self.config.text_config.head_dim
-        elif self.old_gpt_bigcode_modeling:
-            # (before v4.54) GPT BigCode fuses keys and values in one tensor, doubling the head dimension
-            self.embed_size_per_head = self.config.hidden_size // self.config.num_attention_heads * 2
-        elif self.config.model_type == "deepseek_v3":
-            # For deepseek_v3, keys and values have different head dimensions
-            self.qk_head_dim = self.config.qk_rope_head_dim + self.config.qk_nope_head_dim
-            self.v_head_dim = self.config.v_head_dim
-        else:
-            self.embed_size_per_head = self.config.hidden_size // self.config.num_attention_heads
-
-        if self.config.model_type in {
-            "arcee",
-            "deepseek_v3",
-            "cohere",
-            "gemma",
-            "gemma3_text",
-            "glm",
-            "granite",
-            "gpt_oss",
-            "helium",
-            "mistral",
-            "llama",
-            "nemotron",
-            "qwen2",
-            "qwen3",
-            "qwen3_moe",
-            "smollm3",
-            "stablelm",
-        }:
-            self.num_key_value_heads = self.config.num_key_value_heads
-        elif self.config.model_type == "gemma3":
-            self.num_key_value_heads = self.config.text_config.num_key_value_heads
-        elif self.config.model_type == "falcon":
-            if self.config.new_decoder_architecture or not self.config.multi_query:
-                self.num_key_value_heads = self.config.num_kv_heads
-            else:
-                self.num_key_value_heads = 1
-        elif self.config.model_type == "gpt_bigcode":
-            if self.config.multi_query:
-                self.num_key_value_heads = 1
-            else:
-                self.num_key_value_heads = self.config.num_attention_heads
-        else:
-            self.num_key_value_heads = self.config.num_attention_heads
-
-    @property
-    def use_cache(self):
-        logger.warning(
-            "The `ORTModelForCausalLM.use_cache` property is deprecated and will be removed in a future version. "
-            "Please rather use `ORTModelForCausalLM.can_use_cache` to check if a model supports using cache during generation. "
-            "And use `ORTModelForCausalLM.config.use_cache` to check if the model is configured to use cache during generation."
-        )
-        return self.can_use_cache
-
-    @property
-    def use_merged(self):
-        logger.warning(
-            "The `ORTModelForCausalLM.use_merged` property is deprecated and will be removed in a future version. "
-            "Please rather use `ORTModelForCausalLM.is_merged` to check if the underlying model is merged or not."
-        )
-        return self.is_merged
+        text_config = getattr(self.config, "text_config", self.config)
+        self.embed_size_per_head = text_config.hidden_size // text_config.num_attention_heads
+        self.num_key_value_heads = text_config.num_key_value_heads
 
     @add_start_docstrings_to_model_forward(
         CAUSALLM_ONNX_MODEL_DOCSTRING.format("batch_size, sequence_length")
@@ -265,9 +181,10 @@ class ORTModelForCausalLM(ORTModel, GenerationMixin):
         attention_mask: torch.LongTensor | None = None,
         past_key_values: tuple[tuple[torch.Tensor]] | None = None,
         position_ids: torch.LongTensor | None = None,
+        pixel_values: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
         **kwargs,
-    ) -> CausalLMOutputWithPast:
+    ) -> ModelOutput:
         use_torch = isinstance(input_ids, torch.Tensor)
         self.raise_on_numpy_input_io_binding(use_torch)
         use_cache = use_cache if use_cache is not None else self.config.use_cache
@@ -283,12 +200,7 @@ class ORTModelForCausalLM(ORTModel, GenerationMixin):
         # Get the input/output dimensions
         batch_size, in_seq_len = input_ids.shape
         if past_key_values is not None:
-            if self.old_gpt_bigcode_modeling:
-                # (before v4.54) GPT BigCode fuses keys and values in one tensor
-                past_seq_len = past_key_values[0].shape[-2]
-            else:
-                # We use the past value and not key to be compatible with old bloom cache
-                past_seq_len = past_key_values[0][1].shape[-2]
+            past_seq_len = past_key_values[0][1].shape[-2]
         else:
             past_seq_len = 0
 
@@ -296,29 +208,6 @@ class ORTModelForCausalLM(ORTModel, GenerationMixin):
 
         # Prepare position_ids
         if position_ids is None and "position_ids" in self.input_names:
-            if self.config.model_type == "opt":
-                if attention_mask is not None:
-                    # OPT models use a different way to infer position_ids from attention_mask
-                    position_ids = attention_mask.cumsum(-1) - 1
-                    position_ids.masked_fill_(attention_mask == 0, -1)
-                    position_ids = position_ids[:, past_seq_len:]
-                else:
-                    raise ValueError(
-                        "The model OPT requires position_ids for batched generation but none were provided. "
-                        "Please provide position_ids or attention_mask (from which position_ids can be inferred)."
-                    )
-            elif self.old_gpt_bigcode_modeling:
-                if attention_mask is not None:
-                    # GPT BigCode models use a different way to infer position_ids from attention_mask
-                    position_ids = attention_mask.cumsum(-1) - 1
-                    position_ids.masked_fill_(attention_mask == 0, 1)
-                    position_ids = position_ids[:, past_seq_len:]
-                else:
-                    raise ValueError(
-                        "The model gpt_bigcode requires position_ids for batched generation but none were provided. "
-                        "Please provide position_ids or attention_mask (from which position_ids can be inferred)."
-                    )
-            else:
                 # Create position_ids from input_ids
                 position_ids = (
                     torch.arange(past_seq_len, out_seq_len, dtype=torch.long, device=input_ids.device)
@@ -358,6 +247,7 @@ class ORTModelForCausalLM(ORTModel, GenerationMixin):
             "input_ids": input_ids,
             "position_ids": position_ids,
             "attention_mask": attention_mask,
+            "pixel_values": pixel_values,
             "use_cache_branch": use_cache_branch,
         }
         if len(self.key_value_input_names) > 0:
@@ -427,7 +317,7 @@ class ORTModelForCausalLM(ORTModel, GenerationMixin):
         else:
             past_key_values = None
 
-        return CausalLMOutputWithPast(logits=logits, past_key_values=past_key_values)
+        return ModelOutput(logits=logits, past_key_values=past_key_values)
 
     def prepare_inputs_for_generation(self, *args, **kwargs):
         if is_transformers_version("<", "4.46.0"):
@@ -447,12 +337,8 @@ class ORTModelForCausalLM(ORTModel, GenerationMixin):
         **kwargs,
     ):
         if past_key_values is not None:
-            if self.old_gpt_bigcode_modeling:
-                # (before v4.54) GPT BigCode fuses keys and values in one tensor
-                past_seq_len = past_key_values[0].shape[-2]
-            else:
-                # We use the past value and not key to be compatible with bloom cache
-                past_seq_len = past_key_values[0][1].shape[-2]
+            # We use the past value and not key to be compatible with bloom cache
+            past_seq_len = past_key_values[0][1].shape[-2]
 
             if input_ids.shape[1] > past_seq_len:
                 remove_prefix_length = past_seq_len
@@ -460,15 +346,6 @@ class ORTModelForCausalLM(ORTModel, GenerationMixin):
                 remove_prefix_length = input_ids.shape[1] - 1
 
             input_ids = input_ids[:, remove_prefix_length:]
-
-        # falcon, gpt_bigcode, and other models used to override the prepare_inputs_for_generation method to add this logic
-        # https://github.com/huggingface/transformers/blob/v4.40.0/src/transformers/models/gpt_bigcode/modeling_gpt_bigcode.py#L1186
-        if "position_ids" in self.input_names and position_ids is None and attention_mask is not None:
-            # create position_ids on the fly for batch generation
-            position_ids = attention_mask.long().cumsum(-1) - 1
-            position_ids.masked_fill_(attention_mask == 0, 1)
-            if past_key_values:
-                position_ids = position_ids[:, -1].unsqueeze(-1)
 
         return {
             "input_ids": input_ids,
@@ -559,7 +436,7 @@ class ORTModelForCausalLM(ORTModel, GenerationMixin):
         dtype: torch.dtype = torch.float32,
         # other arguments
         model_save_dir: str | Path | TemporaryDirectory | None = None,
-    ) -> ORTModelForCausalLM:
+    ) -> ORTModelForImageTextToText:
         onnx_files = find_files_matching_pattern(
             model_id,
             ONNX_FILE_PATTERN,
@@ -712,7 +589,7 @@ class ORTModelForCausalLM(ORTModel, GenerationMixin):
         # inference options
         use_cache: bool = True,
         **kwargs,
-    ) -> ORTModelForCausalLM:
+    ) -> ORTModelForImageTextToText:
         # this is guaranteed to work since we it uses a mapping from model classes to task names
         # instead of relying on the hub metadata or the model configuration
         task = TasksManager._infer_task_from_model_or_model_class(model_class=cls.auto_model_class)

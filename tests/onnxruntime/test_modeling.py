@@ -67,6 +67,7 @@ from optimum.onnxruntime import (
     ORTModelForCustomTasks,
     ORTModelForFeatureExtraction,
     ORTModelForImageClassification,
+    ORTModelForImageTextToText,
     ORTModelForImageToImage,
     ORTModelForMaskedLM,
     ORTModelForMultipleChoice,

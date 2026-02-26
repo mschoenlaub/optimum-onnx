@@ -1,17 +1,18 @@
-"""Simple example: Export Gemma3 270M to ONNX and generate text.
+"""Simple example: Export Devstral Small 2 to ONNX and generate text.
 
 Usage:
     uv pip install onnxruntime
-    uv run examples/gemma3.py
+    uv run examples/devstral-small-2.py
 """
 
 from transformers import AutoTokenizer
 
-from optimum.onnxruntime.modeling_multimodal import ORTModelForImageTextToText
+from optimum.onnxruntime import ORTModelForCausalLM
 
-model_id = "google/gemma-3-4b-it"
-tokenizer = AutoTokenizer.from_pretrained(model_id, local_files_only=True)
-model = ORTModelForImageTextToText.from_pretrained(model_id, export=True, local_files_only=True)
+
+model_id = "mistralai/Devstral-Small-2-24B-Instruct-2512"
+tokenizer = AutoTokenizer.from_pretrained(model_id)
+model = ORTModelForCausalLM.from_pretrained(model_id, export=True)
 
 # Chat with instruction-tuned model
 conversation = [{"role": "user", "content": "Hello! How are you?"}]

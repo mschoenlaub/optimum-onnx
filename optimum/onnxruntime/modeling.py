@@ -28,6 +28,7 @@ from typing import TYPE_CHECKING, Any
 import numpy as np
 import torch
 from huggingface_hub.constants import HUGGINGFACE_HUB_CACHE
+from optimum.utils import is_transformers_version
 from transformers import (
     AutoConfig,
     AutoModel,
@@ -44,7 +45,7 @@ from transformers import (
     AutoModelForSequenceClassification,
     AutoModelForTokenClassification,
     AutoModelForZeroShotImageClassification,
-    GenerationMixin,
+    GenerationMixin, GenerationConfig,
 )
 from transformers.file_utils import add_end_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward
 from transformers.modeling_outputs import (
@@ -59,25 +60,29 @@ from transformers.modeling_outputs import (
     SemanticSegmenterOutput,
     SequenceClassifierOutput,
     TokenClassifierOutput,
-    XVectorOutput,
+    XVectorOutput, CausalLMOutputWithPast, BaseModelOutputWithPast,
 )
-from transformers.models.auto.modeling_auto import MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING_NAMES
-
+from transformers.models.auto.modeling_auto import MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING_NAMES, \
+    AutoModelForImageTextToText
+from transformers.models.gemma3.modeling_gemma3 import Gemma3ModelOutputWithPast
+from transformers.models.mistral3.modeling_mistral3 import Mistral3CausalLMOutputWithPast
 
 try:
     # transformers>=5
     from huggingface_hub import is_offline_mode
 except ImportError:
-    from transformers.utils import is_offline_mode
+    from transformers.utils import is_offline_mode, ModelOutput
 from transformers.utils import cached_file
 from typing_extensions import Self
 
 from onnxruntime import InferenceSession, SessionOptions
-from optimum.exporters.onnx import main_export
+from optimum.exporters.onnx import main_export, MODEL_TYPES_REQUIRING_POSITION_IDS
 from optimum.exporters.tasks import TasksManager
 from optimum.modeling_base import FROM_PRETRAINED_START_DOCSTRING, OptimizedModel
 from optimum.onnxruntime.base import ORTSessionMixin
-from optimum.onnxruntime.constants import ONNX_FILE_PATTERN, ONNX_WEIGHTS_NAME
+from optimum.onnxruntime.constants import ONNX_FILE_PATTERN, ONNX_WEIGHTS_NAME, DECODER_MERGED_ONNX_FILE_PATTERN, \
+    ONNX_DECODER_MERGED_NAME, DECODER_WITH_PAST_ONNX_FILE_PATTERN, DECODER_ONNX_FILE_PATTERN, \
+    ONNX_DECODER_WITH_PAST_NAME, ONNX_DECODER_NAME
 from optimum.onnxruntime.utils import prepare_providers_and_provider_options
 from optimum.utils.file_utils import find_files_matching_pattern
 from optimum.utils.save_utils import maybe_save_preprocessors

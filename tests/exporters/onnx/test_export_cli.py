@@ -139,7 +139,6 @@ def _get_models_to_test(export_models_dict: dict, library_name: str):
                 # TODO: encoder-decoder auto-infers text3text-generation, but it uses bert as decoder and does not support past key values
                 # TODO: vision-encoder-decoder tiny models have wrong labels on the Hub
                 # TODO: unispeech-sat tiny models have wrong labels on the Hub
-                # TODO: we still don't support gemma3 for image-text-to-text(-with-past) tasks
                 if model_type not in [
                     "segformer",
                     "xlm-roberta",
@@ -147,7 +146,6 @@ def _get_models_to_test(export_models_dict: dict, library_name: str):
                     "encoder-decoder",
                     "vision-encoder-decoder",
                     "unispeech-sat",
-                    "gemma3",
                 ]:
                     models_to_test.append(
                         (f"{model_type}_no_task_{model_name}", model_type, model_name, "auto", "default", False, False)
